@@ -170,8 +170,14 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  list_elem* current_elem = list_begin(&wait_list);
   ticks++;
   thread_tick ();
+  while(current_elem != NULL && list_entry(current_elem, struct thread, sleep_elem)->wake_up_time <= timer_ticks())
+  {
+     sema_up(&list_entry(current_elem, struct thread, sleep_elem)->sleep_sema);
+     current_elem = list_next(&current_elem);
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
