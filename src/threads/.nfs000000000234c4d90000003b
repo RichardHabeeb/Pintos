@@ -100,8 +100,6 @@ struct thread
 
     int64_t wake_up_time;
 
-    struct list_elem sleep_elem;
-
     struct semaphore sleep_sema;
 
     /* Owned by thread.c. */
