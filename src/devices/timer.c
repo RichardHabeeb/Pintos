@@ -88,6 +88,14 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+
+bool wake_up_time_comparison(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  return a->wake_up_time < b->wake_up_time;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
@@ -100,18 +108,12 @@ timer_sleep (int64_t ticks)
 
 
   t->wake_up_time = start+ticks;
-  wait_list->list_insert_ordered(&t->wait_list, &t->sleep_elem, wake_up_time_comparison, NULL)
+  list_insert_ordered(&wait_list, &t->sleep_elem, wake_up_time_comparison, NULL);
 
   sema_down(&t->sleep_sema);
 
 }
 
-bool wake_up_time_comparison(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
-{
-  const struct thread *a = list_entry (a_, struct thread, elem);
-  const struct thread *b = list_entry (b_, struct thread, elem);
-  return a->wake_up_time < b->wake_up_time;
-}
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
    turned on. */
@@ -187,13 +189,15 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-  list_elem* current_elem = list_begin(&wait_list);
   ticks++;
-  thread_tick ();
-  while(current_elem != NULL && list_entry(current_elem, struct thread, sleep_elem)->wake_up_time <= timer_ticks())
+  thread_tick();
+  struct list_elem *current_elem = list_begin(&wait_list);
+  while(current_elem != NULL &&
+        list_entry(current_elem, struct thread, sleep_elem)->wake_up_time <= timer_ticks())
   {
      sema_up(&list_entry(current_elem, struct thread, sleep_elem)->sleep_sema);
-     current_elem = list_next(&current_elem);
+     current_elem = list_next(current_elem);
+     list_pop_front(&wait_list);
   }
 }
 
