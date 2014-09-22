@@ -38,9 +38,9 @@ static void real_time_delay (int64_t num, int32_t denom);
 void
 timer_init (void) 
 {
+  list_init(&wait_list);
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-  list_init(&wait_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -89,29 +89,23 @@ timer_elapsed (int64_t then)
 }
 
 
-bool wake_up_time_comparison(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+bool wake_up_time_comparison (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
 {
-  const struct thread *a = list_entry (a_, struct thread, elem);
-  const struct thread *b = list_entry (b_, struct thread, elem);
+  const struct thread *a = list_entry (a_, struct thread, sleep_elem);
+  const struct thread *b = list_entry (b_, struct thread, sleep_elem);
   return a->wake_up_time < b->wake_up_time;
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
-timer_sleep (int64_t ticks) 
+timer_sleep (int64_t sleep_ticks) 
 {
-  int64_t start = timer_ticks ();
   struct thread *t = thread_current();
-
   ASSERT (intr_get_level () == INTR_ON);
-
-
-  t->wake_up_time = start+ticks;
-  list_insert_ordered(&wait_list, &t->sleep_elem, wake_up_time_comparison, NULL);
-
-  sema_down(&t->sleep_sema);
-
+  t->wake_up_time = timer_ticks () + sleep_ticks;
+  list_insert_ordered (&wait_list, &t->sleep_elem, wake_up_time_comparison, NULL);
+  sema_down (&t->sleep_sema);
 }
 
 
@@ -184,21 +178,28 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-  thread_tick();
-  struct list_elem *current_elem = list_begin(&wait_list);
+  thread_tick ();
+
+  struct list_elem *current_elem = list_begin (&wait_list);
+
   while(current_elem != NULL &&
-        list_entry(current_elem, struct thread, sleep_elem)->wake_up_time <= timer_ticks())
+        current_elem != list_end (&wait_list) &&
+        list_entry (current_elem, struct thread, sleep_elem)->wake_up_time <= timer_ticks())
   {
-     sema_up(&list_entry(current_elem, struct thread, sleep_elem)->sleep_sema);
-     current_elem = list_next(current_elem);
-     list_pop_front(&wait_list);
+     struct list_elem *next_elem = list_next (current_elem);
+     list_remove(current_elem);
+     sema_up (&(list_entry(current_elem, struct thread, sleep_elem)->sleep_sema));
+     current_elem = next_elem;
   }
+
+
+  
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
