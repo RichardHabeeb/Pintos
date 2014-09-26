@@ -509,20 +509,20 @@ next_thread_to_run (void)
     max_priority = highest_thread->priority;
 
     while(current_elem != NULL &&
-        current_elem != list_end (&ready_list))
+        current_elem != list_end (&ready_list)) // loop through ready threads
     {
       current_elem = list_next (current_elem);
       struct thread *indexed_thread = list_entry (current_elem, 
         struct thread, elem);
 
-      if (indexed_thread->priority > max_priority) {
+      if (indexed_thread->priority > max_priority) { // new highest priority
         highest_thread = indexed_thread;
         max_priority = highest_thread->priority;
       }
     }
     
     //printf("Highest priority: %d", highest_thread->priority);
-    return highest_thread;
+    return highest_thread; // returns thread with highest priority
     //return list_entry (list_pop_front (&ready_list), struct thread, elem);
   }
 }
