@@ -63,7 +63,8 @@ static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
-static struct thread *next_thread_to_run (void);
+static struct thread *next_thread_to_run (void); // change to return thread with highest priority (also do this in thread_unblock)
+	// look at what happens with locks, semas, conds
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
@@ -246,7 +247,8 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
-  t->status = THREAD_READY;
+  t->status = THREAD_READY; // run if higher priority than running thread
+				// maybe just by running thread yielding
   intr_set_level (old_level);
 }
 
@@ -494,10 +496,35 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  struct list_elem *current_elem = list_begin (&ready_list);
+  struct thread *highest_thread;
+  int max_priority = 0;
+
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+
+  else {
+    highest_thread = list_entry (list_pop_front (&ready_list), 
+      struct thread, elem);
+    max_priority = highest_thread->priority;
+
+    while(current_elem != NULL &&
+        current_elem != list_end (&ready_list))
+    {
+      current_elem = list_next (current_elem);
+      struct thread *indexed_thread = list_entry (current_elem, 
+        struct thread, elem);
+
+      if (indexed_thread->priority > max_priority) {
+        highest_thread = indexed_thread;
+        max_priority = highest_thread->priority;
+      }
+    }
+    
+    //printf("Highest priority: %d", highest_thread->priority);
+    return highest_thread;
+    //return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
