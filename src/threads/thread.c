@@ -250,7 +250,7 @@ thread_unblock (struct thread *t)
   t->status = THREAD_READY; // run if higher priority than running thread
 				// maybe just by running thread yielding
   intr_set_level (old_level);
-  if (t->priority > thread_current()->priority) thread_yield();
+  //if (t->priority > thread_current()->priority) thread_yield();
 }
 
 /* Returns the name of the running thread. */
