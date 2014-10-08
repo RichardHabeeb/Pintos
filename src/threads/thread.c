@@ -353,7 +353,48 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_get_effective_priority (thread_current ());
+}
+
+int
+thread_get_effective_priority (struct thread *t)
+{
+  struct list_elem *donee = list_begin (&t->donor_list);
+  int ret = t->priority;
+  while(donee != NULL && donee != list_end (&t->donor_list))
+  {
+    int donee_prio = thread_get_effective_priority (list_entry (donee, struct thread, donor_elem));
+    ret = (donee_prio > ret) ? donee_prio : ret;
+    donee = list_next (donee);
+  }
+  return ret;
+}
+
+void 
+thread_donate_priority(struct thread *t)
+{
+  list_push_back (&t->donor_list, &thread_current ()->donor_elem);
+}
+
+void
+thread_purge_donors(struct thread *t, struct list *donors_to_remove)
+{
+  struct list_elem *thread_donor = list_begin (&t->donor_list);
+  while (thread_donor != NULL && thread_donor != list_end (&t->donor_list))
+  {
+    struct list_elem *next = list_next (thread_donor);
+    struct list_elem *donor_to_remove = list_begin (donors_to_remove);
+    while (donor_to_remove != NULL && donor_to_remove != list_end (donors_to_remove))
+    {
+        if (list_entry (donor_to_remove, struct thread, elem) == list_entry (thread_donor, struct thread, donor_elem))
+        {
+          list_remove (thread_donor);
+          break;
+        }
+        donor_to_remove = list_next (donor_to_remove);
+    }
+    thread_donor = next;
+  }
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -473,6 +514,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   sema_init(&t->sleep_sema, 0);
+  list_init (&t->donor_list);
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -507,7 +549,7 @@ next_thread_to_run (void)
   else {
     highest_thread = list_entry (list_pop_front (&ready_list), 
       struct thread, elem);
-    max_priority = highest_thread->priority;
+    max_priority = thread_get_effective_priority (highest_thread);
 
     while(current_elem != NULL &&
         current_elem != list_end (&ready_list)) // loop through ready threads
@@ -515,10 +557,10 @@ next_thread_to_run (void)
       current_elem = list_next (current_elem);
       struct thread *indexed_thread = list_entry (current_elem, 
         struct thread, elem);
-
-      if (indexed_thread->priority > max_priority) { // new highest priority
+      int indexed_thread_priority = thread_get_effective_priority (indexed_thread);
+      if (indexed_thread_priority > max_priority) { // new highest priority
         highest_thread = indexed_thread;
-        max_priority = highest_thread->priority;
+        max_priority = indexed_thread_priority;
       }
     }
     
