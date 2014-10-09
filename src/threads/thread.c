@@ -70,6 +70,11 @@ static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
+bool
+thread_lower_priority (const struct list_elem *a_,
+                       const struct list_elem *b_,
+                       void *aux UNUSED); // from slides
+void thread_yield_to_higher_priority (void); // from slides
 static tid_t allocate_tid (void);
 
 /* Initializes the threading system by transforming the code
@@ -210,6 +215,10 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /*old_level = intr_disable ();
+  thread_yield_to_higher_priority ();
+  intr_set_level (old_level);*/
+
   return tid;
 }
 
@@ -248,9 +257,13 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY; // run if higher priority than running thread
-				// maybe just by running thread yielding
+				// maybe just by running thread_yield
+
+  //if (thread_get_effective_priority(t) > 
+    //thread_get_priority()) thread_yield ();
+  //if (t->priority > thread_current ()->priority) thread_yield ();
+
   intr_set_level (old_level);
-  //if (t->priority > thread_current()->priority) thread_yield();
 }
 
 /* Returns the name of the running thread. */
@@ -342,18 +355,53 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* Returns true if thread a has lower priority than thread b,
+within a list of threads. */
+bool
+thread_lower_priority (const struct list_elem *a_,
+                       const struct list_elem *b_,
+                       void *aux UNUSED)
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+
+  return a->priority < b->priority;
+}
+
+/* If the ready list contains a thread with a higher priority, yields to it. */
+void
+thread_yield_to_higher_priority (void)
+{
+  enum intr_level old_level = intr_disable ();
+  if (!list_empty (&ready_list)) {
+    struct thread *cur = thread_current ();
+    struct thread *max = list_entry (list_max (&ready_list,
+      thread_lower_priority, NULL), struct thread, elem);
+    if (max->priority > cur->priority) {
+      if (intr_context ())
+        intr_yield_on_return ();
+      else
+        thread_yield ();
+    }
+  }
+  intr_set_level (old_level);
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
+  //int old_priority = thread_current ()->priority;
   thread_current ()->priority = new_priority;
+  //thread_yield_to_higher_priority ();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_get_effective_priority (thread_current ());
+  return thread_current ()->priority;
+  //return thread_get_effective_priority (thread_current ());
 }
 
 int
@@ -547,9 +595,15 @@ next_thread_to_run (void)
     return idle_thread;
 
   else {
+
+/*    return list_entry (list_max (&ready_list,
+      thread_lower_priority, NULL), struct thread, elem);*/
+
+
     highest_thread = list_entry (list_pop_front (&ready_list), 
       struct thread, elem);
-    max_priority = thread_get_effective_priority (highest_thread);
+    max_priority = /*thread_get_effective_priority (highest_thread);*/
+	highest_thread->priority;
 
     while(current_elem != NULL &&
         current_elem != list_end (&ready_list)) // loop through ready threads
@@ -557,7 +611,9 @@ next_thread_to_run (void)
       current_elem = list_next (current_elem);
       struct thread *indexed_thread = list_entry (current_elem, 
         struct thread, elem);
-      int indexed_thread_priority = thread_get_effective_priority (indexed_thread);
+      int indexed_thread_priority = /*thread_get_effective_priority (indexed_thread);*/
+	indexed_thread->priority;
+
       if (indexed_thread_priority > max_priority) { // new highest priority
         highest_thread = indexed_thread;
         max_priority = indexed_thread_priority;
@@ -567,6 +623,7 @@ next_thread_to_run (void)
     //printf("Highest priority: %d", highest_thread->priority);
     return highest_thread; // returns thread with highest priority
     //return list_entry (list_pop_front (&ready_list), struct thread, elem);
+
   }
 }
 
