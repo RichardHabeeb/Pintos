@@ -215,9 +215,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  /*old_level = intr_disable ();
+  old_level = intr_disable ();
   thread_yield_to_higher_priority ();
-  intr_set_level (old_level);*/
+  intr_set_level (old_level);
 
   return tid;
 }
@@ -362,10 +362,11 @@ thread_lower_priority (const struct list_elem *a_,
                        const struct list_elem *b_,
                        void *aux UNUSED)
 {
-  const struct thread *a = list_entry (a_, struct thread, elem);
-  const struct thread *b = list_entry (b_, struct thread, elem);
+  struct thread *a = list_entry (a_, struct thread, elem);
+  struct thread *b = list_entry (b_, struct thread, elem);
 
-  return a->priority < b->priority;
+  //return a->priority < b->priority;
+  return thread_get_effective_priority(a) < thread_get_effective_priority(b);
 }
 
 /* If the ready list contains a thread with a higher priority, yields to it. */
@@ -377,7 +378,8 @@ thread_yield_to_higher_priority (void)
     struct thread *cur = thread_current ();
     struct thread *max = list_entry (list_max (&ready_list,
       thread_lower_priority, NULL), struct thread, elem);
-    if (max->priority > cur->priority) {
+   // if (max->priority > cur->priority) {
+    if (thread_get_effective_priority(max) > thread_get_effective_priority(cur)) {
       if (intr_context ())
         intr_yield_on_return ();
       else
@@ -393,15 +395,15 @@ thread_set_priority (int new_priority)
 {
   //int old_priority = thread_current ()->priority;
   thread_current ()->priority = new_priority;
-  //thread_yield_to_higher_priority ();
+  thread_yield_to_higher_priority ();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
-  //return thread_get_effective_priority (thread_current ());
+  //return thread_current ()->priority;
+  return thread_get_effective_priority (thread_current ());
 }
 
 int
@@ -587,43 +589,15 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  struct list_elem *current_elem = list_begin (&ready_list);
-  struct thread *highest_thread;
-  int max_priority = 0;
-
   if (list_empty (&ready_list))
     return idle_thread;
 
   else {
 
-/*    return list_entry (list_max (&ready_list,
-      thread_lower_priority, NULL), struct thread, elem);*/
-
-
-    highest_thread = list_entry (list_pop_front (&ready_list), 
-      struct thread, elem);
-    max_priority = /*thread_get_effective_priority (highest_thread);*/
-	highest_thread->priority;
-
-    while(current_elem != NULL &&
-        current_elem != list_end (&ready_list)) // loop through ready threads
-    {
-      current_elem = list_next (current_elem);
-      struct thread *indexed_thread = list_entry (current_elem, 
-        struct thread, elem);
-      int indexed_thread_priority = /*thread_get_effective_priority (indexed_thread);*/
-	indexed_thread->priority;
-
-      if (indexed_thread_priority > max_priority) { // new highest priority
-        highest_thread = indexed_thread;
-        max_priority = indexed_thread_priority;
-      }
-    }
-    
-    //printf("Highest priority: %d", highest_thread->priority);
-    return highest_thread; // returns thread with highest priority
-    //return list_entry (list_pop_front (&ready_list), struct thread, elem);
-
+    struct list_elem *elem = list_max (&ready_list,
+      thread_lower_priority, NULL);
+    list_remove(elem);
+    return list_entry(elem, struct thread, elem);
   }
 }
 
