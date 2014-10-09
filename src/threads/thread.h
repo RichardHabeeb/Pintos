@@ -145,6 +145,10 @@ void thread_set_priority (int);
 int thread_get_effective_priority (struct thread *t);
 void thread_donate_priority(struct thread *t);
 void thread_purge_donors(struct thread *t, struct list *donees);
+bool thread_lower_priority (const struct list_elem *a_,
+                       const struct list_elem *b_,
+                       void *aux UNUSED); // from slides
+void thread_yield_to_higher_priority (void); // from slides
 
 int thread_get_nice (void);
 void thread_set_nice (int);

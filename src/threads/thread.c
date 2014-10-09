@@ -70,11 +70,7 @@ static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
-bool
-thread_lower_priority (const struct list_elem *a_,
-                       const struct list_elem *b_,
-                       void *aux UNUSED); // from slides
-void thread_yield_to_higher_priority (void); // from slides
+
 static tid_t allocate_tid (void);
 
 /* Initializes the threading system by transforming the code
@@ -258,10 +254,6 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY; // run if higher priority than running thread
 				// maybe just by running thread_yield
-
-  //if (thread_get_effective_priority(t) > 
-    //thread_get_priority()) thread_yield ();
-  //if (t->priority > thread_current ()->priority) thread_yield ();
 
   intr_set_level (old_level);
 }
