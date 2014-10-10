@@ -211,9 +211,8 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  old_level = intr_disable ();
+  /* We need to possibly switch threads whenever a thread is unlocked. */
   thread_yield_to_higher_priority ();
-  intr_set_level (old_level);
 
   return tid;
 }
@@ -242,6 +241,9 @@ thread_block (void)
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+   
+   /* Any time this function is called, we check if the running thread
+    * needs to be preemted. */
 void
 thread_unblock (struct thread *t) 
 {
@@ -252,8 +254,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
-  t->status = THREAD_READY; // run if higher priority than running thread
-				// maybe just by running thread_yield
+  t->status = THREAD_READY; 
 
   intr_set_level (old_level);
 }
@@ -347,6 +348,7 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* From slides */
 /* Returns true if thread a has lower priority than thread b,
 within a list of threads. */
 bool
@@ -357,10 +359,10 @@ thread_lower_priority (const struct list_elem *a_,
   struct thread *a = list_entry (a_, struct thread, elem);
   struct thread *b = list_entry (b_, struct thread, elem);
 
-  //return a->priority < b->priority;
   return thread_get_effective_priority(a) < thread_get_effective_priority(b);
 }
 
+/* From slides */
 /* If the ready list contains a thread with a higher priority, yields to it. */
 void
 thread_yield_to_higher_priority (void)
@@ -370,7 +372,6 @@ thread_yield_to_higher_priority (void)
     struct thread *cur = thread_current ();
     struct thread *max = list_entry (list_max (&ready_list,
       thread_lower_priority, NULL), struct thread, elem);
-   // if (max->priority > cur->priority) {
     if (thread_get_effective_priority(max) > thread_get_effective_priority(cur)) {
       if (intr_context ())
         intr_yield_on_return ();
@@ -381,23 +382,23 @@ thread_yield_to_higher_priority (void)
   intr_set_level (old_level);
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY. */
+/* Sets the current thread's priority to NEW_PRIORITY.
+ * Also yeields to higher priority if one exists. */
 void
 thread_set_priority (int new_priority) 
 {
-  //int old_priority = thread_current ()->priority;
   thread_current ()->priority = new_priority;
   thread_yield_to_higher_priority ();
 }
 
-/* Returns the current thread's priority. */
+/* Returns the current thread's (effective) priority. */
 int
 thread_get_priority (void) 
 {
-  //return thread_current ()->priority;
   return thread_get_effective_priority (thread_current ());
 }
 
+/* Returns the a given thread's effective priority. */
 int
 thread_get_effective_priority (struct thread *t)
 {
@@ -412,12 +413,16 @@ thread_get_effective_priority (struct thread *t)
   return ret;
 }
 
+/* Adds a list_elem referring to a donor thread to the donor
+ * list of a donee. Because we calculate effective priority on
+ *  demand, we need not do anything else.*/
 void 
 thread_donate_priority(struct thread *t)
 {
   list_push_back (&t->donor_list, &thread_current ()->donor_elem);
 }
 
+/* Removes a list of threads from the donor list. */
 void
 thread_purge_donors(struct thread *t, struct list *donors_to_remove)
 {

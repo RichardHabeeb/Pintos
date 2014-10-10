@@ -20,7 +20,7 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
-/* Thread wait list */
+/* Thread wait list. */
 static struct list wait_list;
 
 /* Number of loops per timer tick.
@@ -179,7 +179,8 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-/* Timer interrupt handler. */
+/* Timer interrupt handler. Wakes up threads that are done
+ * sleeping. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
@@ -197,9 +198,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
      sema_up (&(list_entry(current_elem, struct thread, sleep_elem)->sleep_sema));
      current_elem = next_elem;
   }
-
-
-  
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
