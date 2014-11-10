@@ -7,7 +7,7 @@ Project 1 + CIS 520 + Design Ideas
          |int effecti^e_priority()              |                                            schedule                                                             
          |int assigned_priority                 |                                                                                                                 
          |thread *donor                         |                                      synch.c                                                                    
-         +--------------------------------------+                                            sema_down                                                            
+         +--------------------------------------+                                            locking functions                                                           
                                                                                                                                                                   
                                                                                                                                                                   
            (we need to modify these structures)                                                                                                                   
@@ -19,11 +19,5 @@ Project 1 + CIS 520 + Design Ideas
          |thread *waiting_on     |                                                                                                                                
          |priority_t priority    |                                                                                                                                
          +-----------------------+                                                                                                                                
-                                                                                                                                                                  
-         +--------------------+                                                                                                                                   
-         |semaphore           |                                                                                                                                   
-         |                    |                                                                                                                                   
-         |...                 |                                                                                                                                   
-         |thread *owner       |                                                                                                                                   
-         +--------------------+                                                                                                                                   
+                                                                                                                                                                                                                                                                                            
 

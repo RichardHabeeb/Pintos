@@ -46,8 +46,40 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
-  printf ("system call!\n");
-  thread_exit ();
+  typedef int syscall_func(int, int, int);
+  struct syscall_tbl_entry 
+  {
+  	int argc;
+  	syscall_func * func;
+  };
+  static struct syscall_tbl_entry syscall_tbl[] = 
+  {
+    [SYS_HALT     ] = {0, (syscall_func *) sys_halt },
+    [SYS_EXIT     ] = {1, (syscall_func *) sys_exit },
+    [SYS_EXEC     ] = {1, (syscall_func *) sys_exec },
+    [SYS_WAIT     ] = {1, (syscall_func *) sys_wait },
+    [SYS_CREATE   ] = {2, (syscall_func *) sys_create },
+    [SYS_REMOVE   ] = {1, (syscall_func *) sys_remove },
+    [SYS_OPEN     ] = {1, (syscall_func *) sys_open },
+    [SYS_FILESIZE ] = {1, (syscall_func *) sys_filesize },
+    [SYS_READ     ] = {3, (syscall_func *) sys_read },
+    [SYS_WRITE    ] = {3, (syscall_func *) sys_write },
+    [SYS_SEEK     ] = {2, (syscall_func *) sys_seek },
+    [SYS_TELL     ] = {1, (syscall_func *) sys_tell },
+    [SYS_CLOSE    ] = {1, (syscall_func *) sys_close }
+  };
+  
+  int syscall_nr;
+  int arg[3];
+  
+  copy_in(&syscall_nr, f->esp, sizeof(syscall_nr));
+  copy_in(&arg, (int*)f->esp + sizeof(syscall_nr), sizeof(arg));
+
+  if(syscall_nr >= sizeof(syscall_tbl)) thread_exit();
+  
+  printf("syscalling: %i\n", syscall_nr);
+  f->eax = syscall_tbl[syscall_nr].func(arg[0], arg[1], arg[2]);
+
 }
 
 /* Returns true if UADDR is a valid, mapped user address,
@@ -146,7 +178,9 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
-/* Add code */
+  /* Add code */
+  char* kfile = copy_in_string(ufile);
+  process_execute(kfile);
   thread_exit ();
 }
  

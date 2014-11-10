@@ -93,11 +93,20 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    /* Owned by process.c. */
+    struct wait_status *wait_status;    /* This process's completion status. */
+    struct list children;               /* Completion status of children. */
+
+    /* Owned by syscall.c. */
+    struct list fds;                    /* List of file descriptors. */
+    int next_handle;                    /* Next handle value. */
     
     /* We added these two structs. */
     struct list_elem donor_elem;        /* If this thread is donating its priority, it will be in a list */
     struct list donor_list;             /* This thread keeps track of who is donating priority to it */
     
+    struct file *bin_file;              /* Executable. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -111,6 +120,21 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+  };
+
+/* Tracks the completion of a process.
+   Reference held by both the parent, in its `children' list,
+   and by the child, in its `wait_status' pointer. */
+struct wait_status
+  {
+    struct list_elem elem;              /* `children' list element. */
+    struct lock lock;                   /* Protects ref_cnt. */
+    int ref_cnt;                        /* 2=child and parent both alive,
+                                           1=either child or parent alive,
+                                           0=child and parent both dead. */
+    tid_t tid;                          /* Child thread id. */
+    int exit_code;                      /* Child exit code, if dead. */
+    struct semaphore dead;              /* 0=child alive, 1=child dead. */
   };
 
 /* If false (default), use round-robin scheduler.
