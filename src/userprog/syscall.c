@@ -266,7 +266,6 @@ lookup_fd (int handle)
   	if(list_entry (thread_fd_elem, struct file_descriptor, elem)->handle == handle)
   		return list_entry (thread_fd_elem, struct file_descriptor, elem);
   }
-  printf("NO FD FOUND: %i\n", handle);
   thread_exit();
 }
  
@@ -306,7 +305,7 @@ sys_read (int handle, void *udst_, unsigned size)
 
     if (handle == STDIN_FILENO)
     {
-
+		retval = 0;
     }
     else
     {

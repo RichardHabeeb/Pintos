@@ -561,6 +561,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->wait_status = NULL;
+  t->next_handle = 2;
   sema_init(&t->sleep_sema, 0);
   list_init (&t->donor_list);
   list_init (&t->children);
