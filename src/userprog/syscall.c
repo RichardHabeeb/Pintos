@@ -76,7 +76,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   copy_in(&arg, ((int*)f->esp) + 1, sizeof(arg));
 
   if(syscall_nr >= sizeof(syscall_tbl)) thread_exit();
-  
+
   f->eax = syscall_tbl[syscall_nr].func(arg[0], arg[1], arg[2]);
 
 }
@@ -177,35 +177,44 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
-  /* Add code */
-  char* kfile = copy_in_string(ufile);
-  return process_execute(kfile);
-  //thread_exit ();
+   /* Add code */
+  int ret;
+  char* kfile = copy_in_string (ufile);
+  ret = process_execute (kfile);
+  palloc_free_page (kfile);
+  return ret;
 }
  
 /* Wait system call. */
 static int
 sys_wait (tid_t child) 
 {
-  printf("sys_wait called");
-/* Add code */
-  return process_wait(child);
+  /* Add code */
+  return process_wait (child);
 }
  
 /* Create system call. */
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
-  printf("sys_create called");
-  return 0;
+  /* Add code */
+  int ret;
+  char *kfile = copy_in_string (ufile);
+  ret = filesys_create (kfile, initial_size);
+  palloc_free_page (kfile);
+  return ret;
 }
  
 /* Remove system call. */
 static int
 sys_remove (const char *ufile) 
 {
-	printf("sys_remove called");
-/* Add code */
+  /* Add code */
+  int ret;
+  char *kfile = copy_in_string (ufile);
+  ret = filesys_remove (kfile);
+  palloc_free_page (kfile);
+  return ret;
 }
  
 /* A file descriptor, for binding a file handle to a file. */
@@ -274,9 +283,46 @@ sys_filesize (int handle)
 static int
 sys_read (int handle, void *udst_, unsigned size) 
 {
-/* Add code */
-  printf("sys_filesize called");
-  thread_exit ();
+  /* Add code */
+  uint8_t *udst = udst_;
+  int retval, bytes_written;
+  struct file_descriptor *fd = NULL;
+
+  bytes_written = 0;
+
+  if (handle != STDIN_FILENO)
+  	fd = lookup_fd (handle);
+
+  lock_acquire (&fs_lock);
+  while (size > 0) 
+  {
+
+    /* Check that we can touch this user page. */
+    if (!verify_user (udst)) 
+    {
+      lock_release (&fs_lock);
+      thread_exit ();
+    }
+
+    if (handle == STDIN_FILENO)
+    {
+
+    }
+    else
+    {
+	  retval = file_read (&fd->file, udst, size);
+	}
+
+
+
+    /* Advance. */
+    udst += retval;
+    size -= retval;
+    bytes_written += retval;
+    }
+
+  lock_release (&fs_lock);
+  return bytes_written;
 }
  
 /* Write system call. */
@@ -290,6 +336,7 @@ sys_write (int handle, void *usrc_, unsigned size)
   /* Lookup up file descriptor. */
   if (handle != STDOUT_FILENO)
     fd = lookup_fd (handle);
+
 
   lock_acquire (&fs_lock);
   while (size > 0) 

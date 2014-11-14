@@ -139,6 +139,21 @@ release_child (struct wait_status *cs)
 int
 process_wait (tid_t child_tid) 
 {
+  struct thread *cur = thread_current ();
+  struct list_elem *e;
+  
+  for (e = list_begin (&cur->children); e != NULL && e != list_end (&cur->children); e = list_next (e))
+  {
+    struct wait_status *child = list_entry (e, struct wait_status, elem);
+    if (child->tid == child_tid)
+    {
+      /* check for already waiting parent */
+      if (list_size (&child->dead.waiters) > 0) return -1;
+
+      sema_down(&child->dead);
+      return child->exit_code;
+    }
+  }
   return -1;
 }
 
@@ -156,13 +171,21 @@ process_exit (void)
   /* Notify parent that we're dead. */
   if (cur->wait_status != NULL) 
     {
+      struct list_elem *e;
       struct wait_status *cs = cur->wait_status;
 
-      /* add code */
-      
-      printf ("%s: exit(0)\n", cur->name); // HACK all successful ;-)
+      for (e = list_begin (&cur->children); e != NULL && e != list_end (&cur->children); e = list_next (e))
+      {
+        struct wait_status *child = list_entry (e, struct wait_status, elem);
+        release_child(child);
+      }
 
+      /* add code */
+      printf ("%s: exit(%i)\n", cur->name, cs->exit_code); // HACK all successful ;-)
+      sema_up(&cs->dead);
       release_child (cs);
+
+      
     }
 
   /* Free entries of children list. */
