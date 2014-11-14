@@ -515,7 +515,7 @@ static void
 reverse (int argc, char **argv) 
 {
   int i;
-  for(i = 0; i < argc; i++)
+  for(i = 0; i < argc/2; i++)
   {
     char *tmp = argv[i];
     argv[i] = argv[argc-1-i];

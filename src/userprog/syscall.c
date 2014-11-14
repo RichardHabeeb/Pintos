@@ -73,11 +73,10 @@ syscall_handler (struct intr_frame *f UNUSED)
   int arg[3];
   
   copy_in(&syscall_nr, f->esp, sizeof(syscall_nr));
-  copy_in(&arg, (int*)f->esp + sizeof(syscall_nr), sizeof(arg));
+  copy_in(&arg, ((int*)f->esp) + 1, sizeof(arg));
 
   if(syscall_nr >= sizeof(syscall_tbl)) thread_exit();
   
-  printf("syscalling: %i\n", syscall_nr);
   f->eax = syscall_tbl[syscall_nr].func(arg[0], arg[1], arg[2]);
 
 }
@@ -180,22 +179,24 @@ sys_exec (const char *ufile)
 {
   /* Add code */
   char* kfile = copy_in_string(ufile);
-  process_execute(kfile);
-  thread_exit ();
+  return process_execute(kfile);
+  //thread_exit ();
 }
  
 /* Wait system call. */
 static int
 sys_wait (tid_t child) 
 {
+  printf("sys_wait called");
 /* Add code */
-  thread_exit ();
+  return process_wait(child);
 }
  
 /* Create system call. */
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
+  printf("sys_create called");
   return 0;
 }
  
@@ -203,6 +204,7 @@ sys_create (const char *ufile, unsigned initial_size)
 static int
 sys_remove (const char *ufile) 
 {
+	printf("sys_remove called");
 /* Add code */
 }
  
@@ -248,7 +250,15 @@ static struct file_descriptor *
 lookup_fd (int handle)
 {
 /* Add code to lookup file descriptor in the current thread's fds */
-  thread_exit ();
+  struct list_elem *thread_fd_elem = list_begin (&thread_current ()->fds);
+
+  while(thread_fd_elem != NULL && thread_fd_elem != list_end (&thread_current ()->fds))
+  {
+  	if(list_entry (thread_fd_elem, struct file_descriptor, elem)->handle == handle)
+  		return list_entry (thread_fd_elem, struct file_descriptor, elem);
+  }
+  printf("NO FD FOUND: %i\n", handle);
+  thread_exit();
 }
  
 /* Filesize system call. */
@@ -256,6 +266,7 @@ static int
 sys_filesize (int handle) 
 {
 /* Add code */
+  printf("sys_filesize called");
   thread_exit ();
 }
  
@@ -264,6 +275,7 @@ static int
 sys_read (int handle, void *udst_, unsigned size) 
 {
 /* Add code */
+  printf("sys_filesize called");
   thread_exit ();
 }
  
@@ -319,7 +331,6 @@ sys_write (int handle, void *usrc_, unsigned size)
       size -= retval;
     }
   lock_release (&fs_lock);
- 
   return bytes_written;
 }
  
