@@ -57,7 +57,10 @@ process_execute (const char *file_name)
     {
       sema_down (&exec.load_done);
       if (exec.success)
+      {
+        //file_deny_write (file_name); // shouldn't be able to modify open executable
         list_push_back (&thread_current ()->children, &exec.wait_status->elem);
+      }
       else
         tid = TID_ERROR;
     }

@@ -327,10 +327,13 @@ sys_read (int handle, void *udst_, unsigned size)
 {
   /* Add code */
   uint8_t *udst = udst_;
+  off_t retval;
   int i, bytes_read;
+  size_t read_amount;
   struct file_descriptor *fd = NULL;
 
   bytes_read =  0;
+  read_amount = size;
 
   if (handle != STDIN_FILENO)
   	fd = lookup_fd (handle);
@@ -346,15 +349,18 @@ sys_read (int handle, void *udst_, unsigned size)
 
     if (handle == STDIN_FILENO)
     {
-      for (i = 0; i < size; i++) udst[i] = input_getc ();
-      bytes_read = size;
+      for (i = 0; i < read_amount; i++) udst[i] = input_getc ();
+      retval = read_amount;
+	//printf("ifFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
     }
     else
     {
-      bytes_read = file_read (&fd->file, udst, size);
+      retval = file_read (fd->file, udst, read_amount);
+	//printf("thenNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN %jd\n", (intmax_t)retval);
     }
-
+////
   lock_release (&fs_lock);
+  bytes_read += retval;
   return bytes_read;
 }
  
