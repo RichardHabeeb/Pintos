@@ -98,6 +98,8 @@ start_process (void *exec_)
       exec->wait_status->exit_code = -1;
       sema_init (&exec->wait_status->dead, 0);
     }
+
+  //if (success) file_deny_write (exec);
   
   /* Notify parent thread and clean up. */
   exec->success = success;
