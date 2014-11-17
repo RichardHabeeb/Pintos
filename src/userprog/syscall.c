@@ -169,6 +169,7 @@ static int
 sys_exit (int exit_code) 
 {
   thread_current ()->wait_status->exit_code = exit_code;
+  //printf ("%s: exit(%d)\n", thread_current ()->name, exit_code);
   thread_exit ();
   NOT_REACHED ();
 }
@@ -177,9 +178,14 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
-   /* Add code */
+  /* Check pointer validity. */
+  if (!verify_user (ufile)) 
+  {
+    thread_exit ();
+  }
+
   int ret;
-  char* kfile = copy_in_string (ufile);
+  char *kfile = copy_in_string (ufile);
   ret = process_execute (kfile);
   palloc_free_page (kfile);
   return ret;
@@ -197,7 +203,13 @@ sys_wait (tid_t child)
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
-  /* Add code */
+
+  /* Check pointer validity. */
+  if (!verify_user (ufile)) 
+  {
+    thread_exit ();
+  }
+
   int ret;
   char *kfile = copy_in_string (ufile);
   ret = filesys_create (kfile, initial_size);
@@ -224,11 +236,18 @@ struct file_descriptor
     struct file *file;          /* File. */
     int handle;                 /* File handle. */
   };
+
  
 /* Open system call. */
 static int
 sys_open (const char *ufile) 
 {
+  /* Check pointer validity. */
+  if (!verify_user (ufile)) 
+  {
+    thread_exit ();
+  }
+
   char *kfile = copy_in_string (ufile);
   struct file_descriptor *fd;
   int handle = -1;
@@ -268,14 +287,38 @@ lookup_fd (int handle)
   }
   thread_exit();
 }
+
+/* Removes a file descriptor with associated handle from the
+   file descriptor list of the current thread. Returns 0 if
+   fd removed, 1 otherwise. */
+int
+remove_fd (int handle)
+{
+  struct list_elem *thread_fd_elem = list_begin (&thread_current ()->fds);
+
+  while(thread_fd_elem != NULL && thread_fd_elem != list_end (&thread_current ()->fds))
+  {
+        if(list_entry (thread_fd_elem, struct file_descriptor, elem)->handle == handle)
+	{
+                list_remove (thread_fd_elem);
+		return 0;
+	}
+  }
+  return 1;
+}
  
 /* Filesize system call. */
 static int
 sys_filesize (int handle) 
 {
-/* Add code */
-  printf("sys_filesize called");
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+  int size;
+
+  lock_acquire (&fs_lock);
+  size = file_length (fd->file);
+  lock_release (&fs_lock);
+
+  return size;
 }
  
 /* Read system call. */
@@ -284,17 +327,15 @@ sys_read (int handle, void *udst_, unsigned size)
 {
   /* Add code */
   uint8_t *udst = udst_;
-  int retval, bytes_written;
+  int i, bytes_read;
   struct file_descriptor *fd = NULL;
 
-  bytes_written = 0;
+  bytes_read =  0;
 
   if (handle != STDIN_FILENO)
   	fd = lookup_fd (handle);
 
   lock_acquire (&fs_lock);
-  while (size > 0) 
-  {
 
     /* Check that we can touch this user page. */
     if (!verify_user (udst)) 
@@ -305,23 +346,16 @@ sys_read (int handle, void *udst_, unsigned size)
 
     if (handle == STDIN_FILENO)
     {
-		retval = 0;
+      for (i = 0; i < size; i++) udst[i] = input_getc ();
+      bytes_read = size;
     }
     else
     {
-	  retval = file_read (&fd->file, udst, size);
-	}
-
-
-
-    /* Advance. */
-    udst += retval;
-    size -= retval;
-    bytes_written += retval;
+      bytes_read = file_read (&fd->file, udst, size);
     }
 
   lock_release (&fs_lock);
-  return bytes_written;
+  return bytes_read;
 }
  
 /* Write system call. */
@@ -384,24 +418,41 @@ sys_write (int handle, void *usrc_, unsigned size)
 static int
 sys_seek (int handle, unsigned position) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+
+  lock_acquire (&fs_lock);
+  file_seek (fd->file, position);
+  lock_release (&fs_lock);
+
+  return 0;
 }
  
 /* Tell system call. */
 static int
 sys_tell (int handle) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+  int position;
+
+  lock_acquire (&fs_lock);
+  position = file_tell (fd->file);
+  lock_release (&fs_lock);
+
+  return position;
 }
  
 /* Close system call. */
 static int
 sys_close (int handle) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+
+  lock_acquire (&fs_lock);
+  file_close (fd->file);
+  remove_fd (handle);
+  lock_release (&fs_lock);
+
+  return 0;
 }
  
 /* On thread exit, close all open files. */
