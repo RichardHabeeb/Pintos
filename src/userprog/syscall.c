@@ -27,6 +27,8 @@ static int sys_write (int handle, void *usrc_, unsigned size);
 static int sys_seek (int handle, unsigned position);
 static int sys_tell (int handle);
 static int sys_close (int handle);
+
+static bool verify_user (const void *uaddr);
  
 static void syscall_handler (struct intr_frame *);
 static void copy_in (void *, const void *, size_t);
@@ -71,6 +73,9 @@ syscall_handler (struct intr_frame *f UNUSED)
   
   int syscall_nr;
   int arg[3];
+  
+  /* Check esp validity. */
+  if (!verify_user (f->esp)) thread_exit ();
   
   copy_in(&syscall_nr, f->esp, sizeof(syscall_nr));
   copy_in(&arg, ((int*)f->esp) + 1, sizeof(arg));
@@ -179,10 +184,7 @@ static int
 sys_exec (const char *ufile) 
 {
   /* Check pointer validity. */
-  if (!verify_user (ufile)) 
-  {
-    thread_exit ();
-  }
+  if (!verify_user (ufile)) thread_exit ();
 
   int ret;
   char *kfile = copy_in_string (ufile);
@@ -205,10 +207,7 @@ sys_create (const char *ufile, unsigned initial_size)
 {
 
   /* Check pointer validity. */
-  if (!verify_user (ufile)) 
-  {
-    thread_exit ();
-  }
+  if (!verify_user (ufile)) thread_exit ();
 
   int ret;
   char *kfile = copy_in_string (ufile);
@@ -243,10 +242,7 @@ static int
 sys_open (const char *ufile) 
 {
   /* Check pointer validity. */
-  if (!verify_user (ufile)) 
-  {
-    thread_exit ();
-  }
+  if (!verify_user (ufile)) thread_exit ();
 
   char *kfile = copy_in_string (ufile);
   struct file_descriptor *fd;
@@ -325,42 +321,25 @@ sys_filesize (int handle)
 static int
 sys_read (int handle, void *udst_, unsigned size) 
 {
-  /* Add code */
   uint8_t *udst = udst_;
-  off_t retval;
-  int i, bytes_read;
-  size_t read_amount;
+  int i, bytes_read = 0;
   struct file_descriptor *fd = NULL;
+  
+  /* Check pointer validity. */
+  if (!verify_user (udst)) thread_exit ();
+  
+  if (handle == STDIN_FILENO)
+  {
+    for (i = 0; i < size; i++) udst[i] = input_getc ();
+    return size;
+  }
 
-  bytes_read =  0;
-  read_amount = size;
-
-  if (handle != STDIN_FILENO)
-  	fd = lookup_fd (handle);
+  fd = lookup_fd (handle);
 
   lock_acquire (&fs_lock);
-
-    /* Check that we can touch this user page. */
-    if (!verify_user (udst)) 
-    {
-      lock_release (&fs_lock);
-      thread_exit ();
-    }
-
-    if (handle == STDIN_FILENO)
-    {
-      for (i = 0; i < read_amount; i++) udst[i] = input_getc ();
-      retval = read_amount;
-	//printf("ifFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-    }
-    else
-    {
-      retval = file_read (fd->file, udst, read_amount);
-	//printf("thenNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN %jd\n", (intmax_t)retval);
-    }
-////
+  bytes_read = file_read (fd->file, udst, size);
   lock_release (&fs_lock);
-  bytes_read += retval;
+  
   return bytes_read;
 }
  
