@@ -1,0 +1,231 @@
+		           +--------------------------+
+		           |         CIS 520          |
+		           | PROJECT 2: USER PROGRAMS |
+		           |     DESIGN DOCUMENT      |
+		           +--------------------------+
+
+---- GROUP ----
+
+>> Fill in the names of your group members.
+
+Melissa Coats
+Richard Habeeb
+Mike McCall
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			   ARGUMENT PASSING
+			   ================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+struct wait_status
+  {
+    struct list_elem elem;              /* `children' list element. */
+    struct lock lock;                   /* Protects ref_cnt. */
+    int ref_cnt;                        /* 2=child and parent both alive,
+                                           1=either child or parent alive,
+                                           0=child and parent both dead. */
+    tid_t tid;                          /* Child thread id. */
+    int exit_code;                      /* Child exit code, if dead. */
+    struct semaphore dead;              /* 0=child alive, 1=child dead. */
+  };
+
+This is referenced by a process to keep track of parents waiting on children and vice versa.
+
+
+
+struct thread
+  {
+	...
+
+    /* Owned by process.c. */
+    struct wait_status *wait_status;    /* This process's completion status. */
+    struct list children;               /* Completion status of children. */
+
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
+
+#ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
+#endif
+    struct file *bin_file;              /* Executable. */
+
+    /* Owned by syscall.c. */
+    struct list fds;                    /* List of file descriptors. */
+    int next_handle;                    /* Next handle value. */
+
+    	...
+  };
+
+We modified the thread structure to allow us to implement process functionality. We also added a list struct for keeping track of open files.
+
+
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+
+Basically, we parsed arguments by using strtok_r. We made the elements of argv[] in the right order by creating a 'reverse' function that allowed up to reverse the order of the arguments. We avoid overflowing the stack page by limiting the name size and the size of arguments.
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+Strtok_r can be used across multiple threads at the same time, because it has an additional argument that stores the position to continue searching next time between calls.  Uning the non-reentrant version (strtok) would likely create race conditions or behave unexpectedly if it was being used by more than one process at once, because it uses a global variable to store its data.
+
+>> A4: In Pintos, the kernel separates commands into an executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+
+For one, it is often better to keep the kernel as simple as possible to help make it easier to understand, modify, and reuse, so if you could move some functionality outside the kernel that could be a good thing.  That way, the kernel can focus on interfacing with the hardware.
+
+Second, if you were searching for an executable file, that process could be lengthy or time consuming, and would be much better done in the shell, rather than cluttering up the kernel.
+
+			     SYSTEM CALLS
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+/* A file descriptor, for binding a file handle to a file. */
+struct file_descriptor
+  {
+    struct list_elem elem;      /* List element. */
+    struct file *file;          /* File. */
+    int handle;                 /* File handle. */
+  };
+
+This was added to deal with file descriptors. It allows them to be added to lists, point at a file, and be named.
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+A file descriptors are associated with files through a pointer to the file.  Basically. the thread has a list of its open files, and if one of the open files is the one that is being looked for, it returns the file descriptor. File descriptors are only unique within a single process. Files themselves can be handled properly for concurrency.
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+The first thing read and write do is some error checking to make sure the user has permission to read/write the given file, and to make sure that the given address is in an appropriate range.  Then, if the input or output is a regular file, we use the provided procedures to read or write the buffer. If, on the other hand, the input or output is from stdin or to stdout, we have to read/write in pieces by iterating through the given buffer to the given length.
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+The wait system call simply calls process_wait and returns its value.  If a process terminates, it gives its exit status to its parent and releases a semaphore that the parent would have to wait on if it called wait. Also, process_wait returns -1 if any of the given errors occur, such as calling wait twice on the same tid.
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+First, to avoid obscuring the main point of the code, it is important to organize your error handling, and to keep your error handling efficient.  So, you could make separate methods for error handling, so that the main code only needs to contain a few lines to handle errors, and the majority of the work is done elsewhere.  Also, you should do error handling at the beginning of a section of code if possible, both so you don't do extra work processing data that is bad, and to keep the error handling out of the way.  For example, it would be very easy to check if an address is null or not part of the allowed address space immediately after receiving the address, and you could return an error right away.  Other errors might be harder to detect, but the correction code should be made concise, and non-redundant to improve clarity.
+
+To ensure that all allocated resources to a process are freed, regardless of how a process terminates, all processes must terminate by calling syscall_exit.  Syscall_exit then takes care of releasing all resources, so the process does not have to worry about that.
+
+An example of this would be the sys_exec method.  Most of the work done by the sys_exec method is done by process_execute, and there are only a few lines of error-handling code, because it takes advantage of the TID_ERROR value assigned to a thread tid if something went wrong with the thread.  So, it checks to see if the new thread it created was created properly, and cannot continue if not.  If it is a valid tid, it can check to see if the process loaded correctly, and return an error if not, but the main code for that check is also somewhere else.  Again, if the thread fails it will call syscall_exit, which will take care of freeing resources.
+
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+The exec system call is stopped from returning until the executable loads or fails to load by waiting on a semaphore in process_execute (which sys_exec calls) that is "upped" when loading is complete.  If the load is not successful, there is a variable that is set to 'false', and when this variable is checked, if it is false the tid passed back to sys_exec from process_execute is set to TID_ERROR, which is -1.  This is in turn returned by sys_exec.  If the load was successful, the tid returned by both functions is the (valid) tid of the created process.
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+C has a semaphore initialized to 0, which is 'upped' when it exits.  So, if P calls wait(C) before C exits it must wait for the semaphore to be released by the child to continue, and if the child has finished already it does not have to wait.
+
+Resources are managed by allowing each process to release its resources when it exits.  However, the parent process keeps a list of its children are their exit statuses, so it can reference them if it needs to.
+
+C simply does not care if P waits on it or not; it can exit whenever it is finished, and if P is still around it will receive C's exit status; if not it doesn't need to.
+
+Special cases are if a process calls wait on a particular child twice or calls wait on a process that isn't its child it returns -1 immediately.
+
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+Whenever a buffer is passed into a syscall it is always copied into space controlled by the kernel. This is because the execution could get interrupted by a another thread that has access to this memory and change it. Essentially the implementation is designed to be thread safe. We also implemented functionality to verify pointer validity for pointers passed into the kernel from user space so that we dont harm other processes.
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+
+Advantages:
+	- the list of owned file descriptors are stored in the thread struct so they are easy to find access from a syscall
+	- easy to implement and read
+Disadvantages:
+	- as more descriptors are opened, it takes worst case O{n} scaling time to do syscalls based on those the fd handles because of the nature of linked lists (an improvement could be using hash tables based with key being the handle and the value being the file*).
+
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+
+Unchanged.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
