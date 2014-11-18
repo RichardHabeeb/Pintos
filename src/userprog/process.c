@@ -171,14 +171,14 @@ process_exit (void)
   /* Notify parent that we're dead. */
   if (cur->wait_status != NULL) 
     {
-      struct list_elem *e;
+      //struct list_elem *e;
       struct wait_status *cs = cur->wait_status;
 
-      for (e = list_begin (&cur->children); e != NULL && e != list_end (&cur->children); e = next)
+      /*for (e = list_begin (&cur->children); e != NULL && e != list_end (&cur->children); e = next)
       {
         struct wait_status *child = list_entry (e, struct wait_status, elem);
         release_child(child);
-      }
+      }*/
 
       printf ("%s: exit(%i)\n", cur->name, cs->exit_code); // HACK all successful ;-)
       sema_up(&cs->dead);
