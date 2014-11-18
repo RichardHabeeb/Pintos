@@ -145,12 +145,14 @@ process_wait (tid_t child_tid)
   for (e = list_begin (&cur->children); e != NULL && e != list_end (&cur->children); e = list_next (e))
   {
     struct wait_status *child = list_entry (e, struct wait_status, elem);
+    //printf("pid: %d\n", child->tid);
     if (child->tid == child_tid)
     {
       /* check for already waiting parent */
       if (list_size (&child->dead.waiters) > 0) return -1;
 
       sema_down(&child->dead);
+      child->tid = -1; // accounts for already having waited on this tid
       return child->exit_code;
     }
   }
