@@ -179,7 +179,7 @@ process_exit (void)
       struct list_elem *e;
       struct wait_status *cs = cur->wait_status;
 
-      for (e = list_begin (&cur->children); e != NULL && e != list_end (&cur->children); e = list_next (e))
+      for (e = list_begin (&cur->children); e != NULL && e != list_end (&cur->children); e = next)
       {
         struct wait_status *child = list_entry (e, struct wait_status, elem);
         release_child(child);
