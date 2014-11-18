@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "synch.h"
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -88,35 +88,25 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;						/* Priority. */
+    int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-    
-    /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
 
     /* Owned by process.c. */
     struct wait_status *wait_status;    /* This process's completion status. */
     struct list children;               /* Completion status of children. */
 
-    /* Owned by syscall.c. */
-    struct list fds;                    /* List of file descriptors. */
-    int next_handle;                    /* Next handle value. */
-    
-    /* We added these two structs. */
-    struct list_elem donor_elem;        /* If this thread is donating its priority, it will be in a list */
-    struct list donor_list;             /* This thread keeps track of who is donating priority to it */
-    
-    struct file *bin_file;              /* Executable. */
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+    struct file *bin_file;              /* Executable. */
 
-    /* Added for alarm clock. */
-	int64_t wake_up_time; /* Time when thread is to wake up. */
-    struct list_elem sleep_elem; /* For adding a thread to the wait list. */
-    struct semaphore sleep_sema; /* For keeping a thread sleeping until wake up time. */
+    /* Owned by syscall.c. */
+    struct list fds;                    /* List of file descriptors. */
+    int next_handle;                    /* Next handle value. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -167,15 +157,6 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
-
-/* We added the following five funtions */
-int thread_get_effective_priority (struct thread *t);
-void thread_donate_priority(struct thread *t);
-void thread_purge_donors(struct thread *t, struct list *donees);
-bool thread_lower_priority (const struct list_elem *a_,
-                       const struct list_elem *b_,
-                       void *aux UNUSED); // from slides
-void thread_yield_to_higher_priority (void); // from slides
 
 int thread_get_nice (void);
 void thread_set_nice (int);

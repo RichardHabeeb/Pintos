@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -38,12 +39,12 @@ static struct thread *initial_thread;
 static struct lock tid_lock;
 
 /* Stack frame for kernel_thread(). */
-struct kernel_thread_frame 
-  {
+struct kernel_thread_frame
+{
     void *eip;                  /* Return address. */
     thread_func *function;      /* Function to call. */
     void *aux;                  /* Auxiliary data for function. */
-  };
+};
 
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
@@ -63,14 +64,12 @@ static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
-static struct thread *next_thread_to_run (void); // change to return thread with highest priority (also do this in thread_unblock)
-	// look at what happens with locks, semas, conds
+static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
-
 static tid_t allocate_tid (void);
 
 /* Initializes the threading system by transforming the code
@@ -87,7 +86,7 @@ static tid_t allocate_tid (void);
    It is not safe to call thread_current() until this function
    finishes. */
 void
-thread_init (void) 
+thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
@@ -105,7 +104,7 @@ thread_init (void)
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
 void
-thread_start (void) 
+thread_start (void)
 {
   /* Create the idle thread. */
   struct semaphore idle_started;
@@ -211,9 +210,6 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  /* We need to possibly switch threads whenever a thread is unlocked. */
-  thread_yield_to_higher_priority ();
-
   return tid;
 }
 
@@ -241,9 +237,6 @@ thread_block (void)
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
-   
-   /* Any time this function is called, we check if the running thread
-    * needs to be preemted. */
 void
 thread_unblock (struct thread *t) 
 {
@@ -254,8 +247,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
-  t->status = THREAD_READY; 
-
+  t->status = THREAD_READY;
   intr_set_level (old_level);
 }
 
@@ -302,7 +294,8 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
-
+  syscall_exit ();
+  
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
@@ -348,100 +341,18 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/* From slides */
-/* Returns true if thread a has lower priority than thread b,
-within a list of threads. */
-bool
-thread_lower_priority (const struct list_elem *a_,
-                       const struct list_elem *b_,
-                       void *aux UNUSED)
-{
-  struct thread *a = list_entry (a_, struct thread, elem);
-  struct thread *b = list_entry (b_, struct thread, elem);
-
-  return thread_get_effective_priority(a) < thread_get_effective_priority(b);
-}
-
-/* From slides */
-/* If the ready list contains a thread with a higher priority, yields to it. */
-void
-thread_yield_to_higher_priority (void)
-{
-  enum intr_level old_level = intr_disable ();
-  if (!list_empty (&ready_list)) {
-    struct thread *cur = thread_current ();
-    struct thread *max = list_entry (list_max (&ready_list,
-      thread_lower_priority, NULL), struct thread, elem);
-    if (thread_get_effective_priority(max) > thread_get_effective_priority(cur)) {
-      if (intr_context ())
-        intr_yield_on_return ();
-      else
-        thread_yield ();
-    }
-  }
-  intr_set_level (old_level);
-}
-
-/* Sets the current thread's priority to NEW_PRIORITY.
- * Also yeields to higher priority if one exists. */
+/* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
-  thread_yield_to_higher_priority ();
 }
 
-/* Returns the current thread's (effective) priority. */
+/* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_get_effective_priority (thread_current ());
-}
-
-/* Returns the a given thread's effective priority. */
-int
-thread_get_effective_priority (struct thread *t)
-{
-  struct list_elem *donee = list_begin (&t->donor_list);
-  int ret = t->priority;
-  while(donee != NULL && donee != list_end (&t->donor_list))
-  {
-    int donee_prio = thread_get_effective_priority (list_entry (donee, struct thread, donor_elem));
-    ret = (donee_prio > ret) ? donee_prio : ret;
-    donee = list_next (donee);
-  }
-  return ret;
-}
-
-/* Adds a list_elem referring to a donor thread to the donor
- * list of a donee. Because we calculate effective priority on
- *  demand, we need not do anything else.*/
-void 
-thread_donate_priority(struct thread *t)
-{
-  list_push_back (&t->donor_list, &thread_current ()->donor_elem);
-}
-
-/* Removes a list of threads from the donor list. */
-void
-thread_purge_donors(struct thread *t, struct list *donors_to_remove)
-{
-  struct list_elem *thread_donor = list_begin (&t->donor_list);
-  while (thread_donor != NULL && thread_donor != list_end (&t->donor_list))
-  {
-    struct list_elem *next = list_next (thread_donor);
-    struct list_elem *donor_to_remove = list_begin (donors_to_remove);
-    while (donor_to_remove != NULL && donor_to_remove != list_end (donors_to_remove))
-    {
-        if (list_entry (donor_to_remove, struct thread, elem) == list_entry (thread_donor, struct thread, donor_elem))
-        {
-          list_remove (thread_donor);
-          break;
-        }
-        donor_to_remove = list_next (donor_to_remove);
-    }
-    thread_donor = next;
-  }
+  return thread_current ()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -559,13 +470,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->magic = THREAD_MAGIC;
-  t->wait_status = NULL;
-  t->next_handle = 2;
-  sema_init(&t->sleep_sema, 0);
-  list_init (&t->donor_list);
   list_init (&t->children);
+  t->wait_status = NULL;
   list_init (&t->fds);
+  t->next_handle = 2;
+  t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -592,14 +501,8 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-
-  else {
-
-    struct list_elem *elem = list_max (&ready_list,
-      thread_lower_priority, NULL);
-    list_remove(elem);
-    return list_entry(elem, struct thread, elem);
-  }
+  else
+    return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -684,7 +587,7 @@ allocate_tid (void)
 
   return tid;
 }
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

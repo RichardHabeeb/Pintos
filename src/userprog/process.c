@@ -57,10 +57,7 @@ process_execute (const char *file_name)
     {
       sema_down (&exec.load_done);
       if (exec.success)
-      {
-        //file_deny_write (file_name); // shouldn't be able to modify open executable
         list_push_back (&thread_current ()->children, &exec.wait_status->elem);
-      }
       else
         tid = TID_ERROR;
     }
@@ -101,8 +98,6 @@ start_process (void *exec_)
       exec->wait_status->exit_code = -1;
       sema_init (&exec->wait_status->dead, 0);
     }
-
-  //if (success) file_deny_write (exec);
   
   /* Notify parent thread and clean up. */
   exec->success = success;
@@ -185,12 +180,9 @@ process_exit (void)
         release_child(child);
       }
 
-      /* add code */
       printf ("%s: exit(%i)\n", cur->name, cs->exit_code); // HACK all successful ;-)
       sema_up(&cs->dead);
       release_child (cs);
-
-      
     }
 
   /* Free entries of children list. */

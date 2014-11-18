@@ -83,7 +83,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   if(syscall_nr >= sizeof(syscall_tbl)) thread_exit();
 
   f->eax = syscall_tbl[syscall_nr].func(arg[0], arg[1], arg[2]);
-
+  
 }
 
 /* Returns true if UADDR is a valid, mapped user address,
@@ -235,7 +235,7 @@ struct file_descriptor
     struct file *file;          /* File. */
     int handle;                 /* File handle. */
   };
-
+ 
  
 /* Open system call. */
 static int
@@ -243,7 +243,7 @@ sys_open (const char *ufile)
 {
   /* Check pointer validity. */
   if (!verify_user (ufile)) thread_exit ();
-
+  
   char *kfile = copy_in_string (ufile);
   struct file_descriptor *fd;
   int handle = -1;
@@ -302,7 +302,7 @@ remove_fd (int handle)
   }
   return 1;
 }
- 
+
 /* Filesize system call. */
 static int
 sys_filesize (int handle) 
@@ -355,7 +355,6 @@ sys_write (int handle, void *usrc_, unsigned size)
   if (handle != STDOUT_FILENO)
     fd = lookup_fd (handle);
 
-
   lock_acquire (&fs_lock);
   while (size > 0) 
     {
@@ -396,6 +395,7 @@ sys_write (int handle, void *usrc_, unsigned size)
       size -= retval;
     }
   lock_release (&fs_lock);
+ 
   return bytes_written;
 }
  
